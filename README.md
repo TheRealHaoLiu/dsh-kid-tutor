@@ -1,5 +1,12 @@
 # dsh-kid-tutor
 
+> **Disclaimer.** This is a completely yolo'd, vibe-coded, for-fun project. It is
+> also how I am learning DeepSeek Harness and how to build on top of it, so expect
+> wrong turns, rewrites, and opinions that change between commits. It is built for
+> one kid in one house. Nothing here is audited, nothing is a product, and if you
+> put an LLM in front of your own child on the strength of this repo, that is on
+> you. Read it as a worked example, not a recommendation.
+
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) bundle
 that turns the harness into a tutor for a young kid — one that guides toward
 answers instead of handing them over, and where every safety property is enforced
