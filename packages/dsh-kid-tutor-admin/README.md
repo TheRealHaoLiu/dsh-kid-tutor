@@ -17,7 +17,7 @@ independent `@deepseek-ai/dsh-session-persistence-jsonl` +
 | Plugin | Plane | Row | Owns |
 |---|---|---|---|
 | `kid-admin-config` | host (bundle) | `kid-admin-config` | The one patchable config row (`kidSessionsDir`/`timezone`/`defaultSince`), published as `ctx.kidAdminConfig`. |
-| `kid-store` | host (bundle), inside an isolated `cordis:group` | `kid-store` | A **service** (`ctx.kidStore`) wrapping a private, isolated `sessionPersistence`/`sessionQuery` pair pointed at `kidSessionsDir`. `listSessions`/`readSession`/`guardEvents`/`deniedTools`/`quotaEvents`/`pythonRuns`/`stats`. |
+| `kid-store` | host (bundle), inside an isolated `cordis:group` | `kid-store` | A **service** (`ctx.kidStore`) wrapping a private, isolated `sessionPersistence`/`sessionQuery` pair pointed at `kidSessionsDir`, plus `kidTutorEventsDir`'s sidecar audit files. `listSessions`/`readSession`/`guardEvents`/`deniedTools`/`quotaEvents`/`pythonRuns`/`stats`. |
 | `admin-tools` | agent (preset) | `admin-tools` | Registers the `kid_*` tools into `ctx.tools` for whichever agent preset mounts it (`presets/kid-admin`). |
 
 `kid-store` and its private session-persistence/session-query pair live in
@@ -37,6 +37,7 @@ per-session for a web profile (docs/dsh-seams.md §0.1).
 | Key | Default | Notes |
 |---|---|---|
 | `kidSessionsDir` | `$HOME/.dsh-kid/sessions` | Must equal the kid profile's own `session-persistence-jsonl` `root`. |
+| `kidTutorEventsDir` | `$HOME/.dsh-kid/kid-tutor/events` | Must equal the kid profile's own sidecar audit root (`dsh-kid-tutor/events.ts`'s `kidTutorEventsDir()`) — guard-verdict/tool-denied/quota/python-run/alert facts for any session written after the sidecar fix (see "Known limitations" below). |
 | `timezone` | `""` (host local) | IANA zone used to format timestamps and bucket `stats()` by day. |
 | `defaultSince` | `"24h"` | Fallback lookback window (`resolveSince` also accepts `"<n>h"`, `"<n>d"`, `"<n>m"`, or an ISO timestamp) for any tool/method call that omits `since`. Unparsable input fails OPEN to the default window rather than erroring — a guard/digest surface should always show *something*. |
 
@@ -46,6 +47,7 @@ Override in `profiles/kid-admin/cordis.patch.yml`:
 - id: kid-admin-config
   config:
     kidSessionsDir: !!js process.env.DSH_KID_SESSIONS_DIR ?? (process.env.HOME + '/.dsh-kid/sessions')
+    kidTutorEventsDir: !!js process.env.DSH_KID_TUTOR_EVENTS_DIR ?? (process.env.HOME + '/.dsh-kid/kid-tutor/events')
 ```
 
 ## Tools (`admin-tools.ts`)
@@ -98,23 +100,40 @@ NAMES (never values) for inspection.
 
 ## Known limitations / unverified
 
-- **Most real on-disk kid sessions currently fail to read at all**, admin
-  bundle unchanged: a read-only smoke check of the real
-  `~/.dsh-kid/sessions` (19 sessions) found only 1 readable through
-  `ctx.sessionQuery` — the other 18 threw `SESSION_QUERY_PERSISTENCE_FAILED`
+- **Sessions written before the sidecar fix are read-only-recoverable, not
+  kid-resumable.** Every real on-disk kid session used to fail
+  `ctx.sessionQuery.readSession()` with `SESSION_QUERY_PERSISTENCE_FAILED`
   ("contains event type \"kid-tutor/quota\" ... unknown to this harness and
-  not marked ignorable"). Confirmed directly against the raw `.jsonl.zstd`
-  bytes (via `zstd -d`): the persisted `kid-tutor/quota` event genuinely has
-  no `ignorable` field. This is a `packages/dsh-kid-tutor` writer issue, not
-  an admin-bundle one, and out of this package's scope to fix: `Session.append<T>(type,
-  data, ...opts)`'s public signature only accepts a `SurfaceIntent` (`opts[0]`)
-  for `SurfaceEventType`s and `[]` otherwise — there is currently no
-  parameter on the public API through which a plugin's `session.append(...)`
-  call can set the envelope's own `ignorable: true`, despite
-  docs/dsh-seams.md's own `kid-tutor/guard-verdict` append example assuming
-  it works. Until `dsh-kid-tutor` (or a future `dsh-session` release) closes
-  that gap, this admin bundle's tools will throw on almost every real kid
-  session that contains any `kid-tutor/*` log-only event.
+  not marked ignorable") — a smoke check of the real `~/.dsh-kid/sessions`
+  (19 sessions) found only 1 readable. Root cause (see
+  `dsh-kid-tutor/src/events.ts`'s module doc and docs/dsh-seams.md §7 "Known
+  deviation"): dsh's runtime reader checks a *compile-time-generated*
+  `KNOWN_SESSION_EVENT_TYPES` set built only from event types declared
+  *inside the deepseek-harness repo itself* — an out-of-tree bundle's own
+  `SessionEventMap` declaration merge never reaches it, and there is no
+  public way to mark an appended event `ignorable: true` either
+  (`Session.append()`'s signature has no parameter for it). Fixed by moving
+  the kid bundle's audit facts out of dsh's session log entirely, into its
+  own sidecar JSONL file (`kidTutorEventsDir`), and by teaching this
+  package's `raw-session-read.ts` to recover the OLD inline-logged facts
+  from existing sessions via dsh's own sanctioned
+  `SessionPersistence.readRaw()` + `decodeStorageRecord()` primitives
+  (never a monkey-patch). Verified against the real store: all 19 sessions
+  now read cleanly through `KidStore`, recovering their `kid-tutor/*` facts
+  (3 non-pass guard verdicts, 2 alerts, 2 denied-tool calls, 46 quota
+  events, 7 python runs at last check).
+
+  This closes the read side completely, for both old and new sessions. It
+  does **not** make a PRE-fix session resumable by the KID process itself:
+  `prepare()` (the live-resume path) runs the exact same
+  `assertEventsSupported` check as `readSession()`, and there is no raw
+  bypass for a path that must keep writing to the log afterward. A parent
+  or kid resuming one of the 18 pre-fix sessions specifically will still hit
+  the harness's own refusal and have to start fresh; nothing about that
+  history is lost (the admin can still read it, per above) — only live
+  continuation of those specific old sessions is unavailable. Every session
+  written after this fix resumes normally, on both sides, because its dsh
+  log never contains a `kid-tutor/*` line to begin with.
 - **`!!js ctx.kidAdminConfig.kidSessionsDir` inside a nested `cordis:group`
   row, referencing an earlier top-level row in the SAME patch file** —
   plausible by analogy to `ctx.webStartup` (docs/dsh-seams.md §8), and it

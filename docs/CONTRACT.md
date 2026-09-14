@@ -28,7 +28,23 @@ docs/                          dsh-seams.md (recon), this file
   `profiles/kid/cordis.patch.yml`'s comment on the `agent-default-model` row).
   Admin default: `deepseek-v4-pro` (patchable).
 
-## Log-only session event types (declaration-merged; log-only, never surface)
+## Log-only audit facts (sidecar JSONL, never dsh's session log, never surface)
+
+Written to `$DSH_HOME/kid-tutor/events/<sessionId>.jsonl` (one JSON object per
+line: `{ type, time, data }`), NOT appended into dsh's own session log via
+`Session.append()`. They used to be — declaration-merged into
+`SessionEventMap`, per an earlier version of this doc — but dsh's runtime
+reader validates event types against a separate, compile-time-generated
+`KNOWN_SESSION_EVENT_TYPES` set built only from types declared inside the
+`deepseek-harness` repo itself; an out-of-tree bundle's own `SessionEventMap`
+member never reaches it, and there is no public way to mark an appended
+event `ignorable: true` either. Every session that ever got one of these
+events appended into dsh's log became permanently unreadable by any future
+reader, including the kid harness's own resume of its own session. See
+`packages/dsh-kid-tutor/src/events.ts`'s module doc and
+`docs/dsh-seams.md` §7 "Known deviation" for the full mechanism and
+citations, and `packages/dsh-kid-tutor-admin/README.md`'s "Known
+limitations" for how sessions written before this fix are still recovered.
 
 | type | data |
 |---|---|
@@ -107,6 +123,10 @@ workspaceRoot; NOT a shell). No bash, no subagents, no plan mode, no skills.
 ## Config defaults (all patchable rows)
 
 - `workspaceRoot`: `$HOME/.dsh-kid/workspace`
+- kid-tutor audit sidecar root: `$HOME/.dsh-kid/kid-tutor/events` (`events.ts`'s
+  `kidTutorEventsDir()`); admin's mirror config row, `kidTutorEventsDir`, must
+  point at the same directory (default `$HOME/.dsh-kid/kid-tutor/events`, same as
+  the kid side's default since both default off the shared `.dsh-kid` home).
 - `allowlist`: `en.wikipedia.org, simple.wikipedia.org, bulbapedia.bulbagarden.net,
   docs.python.org, kids.britannica.com`
 - `quota`: 60 turns/day, no chats between 21:00 and 07:00 local

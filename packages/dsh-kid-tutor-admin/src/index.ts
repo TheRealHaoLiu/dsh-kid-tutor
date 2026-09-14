@@ -17,9 +17,18 @@ export {
   formatTimestamp,
   dayKey,
   defaultKidSessionsDir,
+  defaultKidTutorEventsDir,
 } from "./config.ts";
-export { KID_TUTOR_EVENT_TYPES } from "./kid-tutor-events.ts";
-export type { KidTutorEventType } from "./kid-tutor-events.ts";
+export {
+  KID_TUTOR_EVENT_TYPES,
+  readSidecarRecords,
+  mergeSidecarEvents,
+} from "./kid-tutor-events.ts";
+export type {
+  KidTutorEventType,
+  KidTutorSidecarRecord,
+} from "./kid-tutor-events.ts";
+export { readSessionTolerant, readRawSessionLog } from "./raw-session-read.ts";
 export { KidStore } from "./kid-store.ts";
 export type {
   SessionSummary,

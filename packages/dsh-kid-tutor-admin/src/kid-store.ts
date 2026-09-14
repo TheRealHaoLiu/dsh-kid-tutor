@@ -21,10 +21,11 @@
  */
 
 import { Service, type Context } from "@deepseek-ai/cordis";
-import type { SessionEvent, SessionId } from "@deepseek-ai/dsh-session";
+import { SessionId, type SessionEvent, type SessionHeader } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-session-query";
 import "./kid-tutor-events.ts";
-import type { GuardCategory } from "./kid-tutor-events.ts";
+import { mergeSidecarEvents, readSidecarRecords, type GuardCategory } from "./kid-tutor-events.ts";
+import { readSessionTolerant } from "./raw-session-read.ts";
 import { Config, resolveSince, dayKey, type KidAdminConfig } from "./config.ts";
 import {
   firstUserMessagePreview,
@@ -144,7 +145,11 @@ export interface DailyStats {
 /** Read-only analyst view over the kid profile's session store. */
 export class KidStore extends Service {
   static readonly provide = "kidStore";
-  static readonly inject = ["sessionQuery"] as const;
+  // `sessionPersistence` is injected alongside `sessionQuery` for
+  // `raw-session-read.ts`'s fallback (docs/dsh-seams.md §7 "Known
+  // deviation") — both resolve, inside `kid-store-realm`'s isolated group,
+  // to the SAME second reader pointed at the kid profile's store.
+  static readonly inject = ["sessionQuery", "sessionPersistence"] as const;
   /** Loader-recognized config schema (mirrors `JsonlSessionPersistence.Config`) — defaults/validates the row's `config:`. */
   static readonly Config = Config;
 
@@ -168,15 +173,13 @@ export class KidStore extends Service {
     const summaries: SessionSummary[] = [];
     for (const record of records) {
       if (record.header.createdAt < cutoff) continue;
-      const snapshot = await this.ctx.sessionQuery.readSession(
-        record.header.id,
-      );
+      const { events } = await this.loadLog(record.header.id);
       summaries.push({
         id: record.header.id,
         started: record.header.createdAt,
-        lastActivity: lastActivity(record.header, snapshot.events),
-        turnCount: turnCount(snapshot.events),
-        firstUserMessagePreview: firstUserMessagePreview(snapshot.events),
+        lastActivity: lastActivity(record.header, events),
+        turnCount: turnCount(events),
+        firstUserMessagePreview: firstUserMessagePreview(events),
       });
     }
     summaries.sort((a, b) => b.started - a.started);
@@ -185,9 +188,29 @@ export class KidStore extends Service {
       : summaries;
   }
 
-  /** Full raw event log for one session, id and header included. */
-  private async loadLog(sessionId: string) {
-    return this.ctx.sessionQuery.readSession(sessionId as SessionId);
+  /**
+   * Full raw event log for one session, id and header included. Reads
+   * through the strict path first, falling back to
+   * `raw-session-read.ts`'s tolerant decode for a session written before
+   * the sidecar fix (docs/dsh-seams.md §7 "Known deviation"), then merges
+   * in the session's sidecar audit file (present for any session written
+   * AFTER the fix; absent, and a no-op merge, for one written before it).
+   */
+  private async loadLog(
+    sessionId: string,
+  ): Promise<{ session: SessionHeader; events: SessionEvent[] }> {
+    const snapshot = await readSessionTolerant(
+      this.ctx,
+      SessionId(sessionId),
+    );
+    const sidecar = readSidecarRecords(
+      this.config.kidTutorEventsDir,
+      sessionId,
+    );
+    return {
+      session: snapshot.session,
+      events: mergeSidecarEvents(snapshot.events, sidecar),
+    };
   }
 
   /** Render one session's transcript, log-only `kid-tutor/*` audit events included when asked. */

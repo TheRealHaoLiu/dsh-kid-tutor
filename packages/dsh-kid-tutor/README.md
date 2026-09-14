@@ -28,7 +28,7 @@ category/severity classification), paced release, the brevity cap, `parent-alert
 | `parent-alert` | `src/parent-alert.ts` | A `ParentAlertService` (`ctx.parentAlert`) `output-guard` calls when the judge's `severity` clears `alertSeverity` (default 2): POSTs a short plain-text notice (time, category, severity, the kid's triggering message) to `alertWebhookUrl` with a 5 s timeout, fire-and-forget (never blocks the kid's turn), logging `kid-tutor/alert` once the attempt settles. Disabled by default (empty URL). See its file header for why the URL/headers come from `$KID_ALERT_WEBHOOK_URL`/`$KID_ALERT_WEBHOOK_HEADERS`, not a patch file. |
 | `persona-name` | `src/persona-name.ts` | Contributes a small `ctx.systemPrompt` section naming the kid, resolved from `$KID_NAME` (environment) first, then config, then `"friend"`. See its file header for why this can't just be a preset-file config value. |
 | `kid-ui` | `src/kid-ui.ts` | The kid's whole front end. See [Kid UI](#kid-ui) below. |
-| `events.ts` | `src/events.ts` | The four log-only `SessionEventMap` entries from `docs/CONTRACT.md` (`kid-tutor/guard-verdict`, `kid-tutor/tool-denied`, `kid-tutor/quota`, `kid-tutor/python-run`) plus one append helper per type. |
+| `events.ts` | `src/events.ts` | The five log-only audit facts from `docs/CONTRACT.md` (`kid-tutor/guard-verdict`, `kid-tutor/tool-denied`, `kid-tutor/quota`, `kid-tutor/python-run`, `kid-tutor/alert`) plus one append helper per type. Written to this bundle's OWN sidecar JSONL file (`$DSH_HOME/kid-tutor/events/<sessionId>.jsonl`), NOT into dsh's session log — see its module doc for why `Session.append()` could never make an out-of-tree event type safe to replay. |
 | `config.ts` | `src/config.ts` | The shared `KidTutorConfig` schema pieces (workspace root, allowlist, quota, judge, blocked patterns, kid name, python binary) every plugin's own `Config` schema is built from, so a default is declared once. |
 | `net.ts` | `src/net.ts` | Pure hostname/URL classification (`checkFetchUrl`, `isAllowedHost`, `isDisallowedHost`) — the logic behind `tool-policy`'s allowlist. |
 | `paths.ts` | `src/paths.ts` | `resolveWithinRoot()` — symlink-safe path containment shared by `workspace-fence` and `run-python`, built on `@deepseek-ai/dsh-home-paths`'s `canonicalizeWatchPath`. |
@@ -166,7 +166,9 @@ event.)
 The gate now decides locally — our own nested judge/redo calls are tagged in a WeakSet
 this module owns, and a guarded turn is one with no `purpose` whose `sessionId` was
 announced through `agent/created`. Verified live: one turn produces
-`kid-tutor/guard-verdict` events in the session log and a single-text-block,
+`kid-tutor/guard-verdict` events (at the time, appended into the session log via
+`Session.append()`; since moved to this bundle's own sidecar file — see `events.ts`'s
+module doc and the "Known deviation" note below) and a single-text-block,
 guard-synthesized `assistant/message`, while the session-title call and the guard's own
 judge call are correctly skipped.
 
@@ -208,6 +210,25 @@ answer lives in module state (a `WeakSet`/`WeakMap`, a module-level `Symbol()`,
 - **`@deepseek-ai/schemastery` is version `3.18.x` on the public registry, not `4.x`**
   (an unrelated unscoped `schemastery` package under the same install tree misled an
   early check). Fixed in `package.json`.
+
+- **A `SessionEventMap` declaration merge in an out-of-tree bundle does NOT make
+  `session.append()` safe to replay, contrary to docs/dsh-seams.md §7's original
+  by-analogy example.** dsh's runtime reader checks a *compile-time-generated*
+  `KNOWN_SESSION_EVENT_TYPES` set built only from event types declared inside the
+  `deepseek-harness` repo itself; an out-of-tree `declare module` merge never reaches
+  it, and there is no public way to mark an appended event `ignorable: true` either.
+  Every `kid-tutor/*` event this bundle ever appended into dsh's own session log
+  became permanently unreadable by ANY future reader — including this bundle's own
+  session resume after a restart, not just `dsh-kid-tutor-admin`'s cross-profile
+  reads (confirmed: 18 of 19 real on-disk sessions threw
+  `SESSION_QUERY_PERSISTENCE_FAILED`). Fixed by moving these five log-only facts
+  (`kid-tutor/guard-verdict`, `-tool-denied`, `-quota`, `-python-run`, `-alert`) out
+  of dsh's session log entirely, into this bundle's own sidecar JSONL file
+  (`events.ts`'s `kidTutorEventsDir()`/`kidTutorSidecarPath()`) — see that module's
+  doc comment for the full mechanism and citations, and
+  `dsh-kid-tutor-admin`'s README "Known limitations" for the read-side recovery of
+  sessions written before this fix, and its one residual gap (those specific old
+  sessions are admin-readable but not kid-resumable).
 
 ### Smaller, accepted gaps
 

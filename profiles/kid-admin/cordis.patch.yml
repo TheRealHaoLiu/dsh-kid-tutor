@@ -42,3 +42,8 @@
 - id: kid-admin-config
   config:
     kidSessionsDir: !!js process.env.DSH_KID_SESSIONS_DIR ?? (process.env.HOME + '/.dsh-kid/sessions')
+    # Mirror of kidSessionsDir, for the kid bundle's own audit sidecar files
+    # (docs/dsh-seams.md §7 "Known deviation", CONTRACT.md "Log-only audit
+    # facts"). Must equal the kid profile's own `kidTutorEventsDir()`
+    # default (`$DSH_HOME/kid-tutor/events`) unless overridden on both sides.
+    kidTutorEventsDir: !!js process.env.DSH_KID_TUTOR_EVENTS_DIR ?? (process.env.HOME + '/.dsh-kid/kid-tutor/events')

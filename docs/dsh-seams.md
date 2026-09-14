@@ -739,10 +739,11 @@ Every other event type (including anything you declaration-merge) is
 Two layers, pick based on whether the fact should be model-visible:
 
 **Log-only, not model-visible** (guard verdicts, judge I/O, quota counters —
-exactly DESIGN.md §4/§6's audit needs): declaration-merge a new
-`SessionEventMap` entry, the same way `compaction/*` and
-`dsh-hook-protocol`'s `hook/invoked`/`hook/result` do
-(`docs/subsystems/session.md` "Plugin-contributed log-only events"):
+exactly DESIGN.md §4/§6's audit needs): declaration-merging a new
+`SessionEventMap` entry, the same shape `compaction/*` and
+`dsh-hook-protocol`'s `hook/invoked`/`hook/result` use
+(`docs/subsystems/session.md` "Plugin-contributed log-only events"), looks
+like the obvious move:
 
 ```ts
 declare module '@deepseek-ai/dsh-session/types' {
@@ -759,6 +760,109 @@ declare module '@deepseek-ai/dsh-session/types' {
 // append (no SurfaceIntent — compiler rejects passing one for a non-surface type):
 session.append('kid-tutor/guard-verdict', { stage: 'judge', verdict: 'block', ... })
 ```
+
+**KNOWN DEVIATION (confirmed the hard way, `dsh-kid-tutor`'s own history): this
+compiles, runs, and is a trap for an out-of-tree bundle.** `compaction/*` and
+`hook/invoked`/`hook/result` are safe examples ONLY because they are declared
+*inside the deepseek-harness repo itself*. The runtime check that decides
+whether a stored event type is safe to replay does **not** consult
+`SessionEventMap` at all:
+
+```ts
+// packages/session/session-persistence/src/coordinator.ts
+private assertEventsSupported(meta: SessionHeader, events: readonly SessionEvent[]): void {
+  for (const event of events) {
+    if (KNOWN_SESSION_EVENT_TYPES.has(event.type) || event.ignorable === true) continue
+    throw this.unsupported(meta, `session "${meta.id}" contains event type "${event.type}" ` +
+      `(seq ${event.seq}) unknown to this harness and not marked ignorable; refusing to ` +
+      `interpret the log — it was likely written by a newer harness`)
+  }
+}
+```
+`KNOWN_SESSION_EVENT_TYPES` (`packages/core/session/src/known-event-types.ts`,
+re-exported from `@deepseek-ai/dsh-session`) is a flat `Set<string>`, GENERATED
+by `scripts/gen-persistence-catalog.ts` from every `SessionEventMap` member
+declared **inside the deepseek-harness monorepo**, verified fresh at build time
+by `verify-persistence-catalog`. Its own top comment says the quiet part out
+loud: *"Downstream (out-of-repo) plugin events are outside this list by
+construction; a registration surface for them is deferred until such a
+consumer exists."* There is no `ctx.session.registerEventType(...)`, no
+runtime registry a bundle can write into — the set is closed at the
+harness's own build time, and a bundle's own `declare module` augmentation
+only ever affects **TypeScript's** type-checking of local `session.append()`
+call sites; it has zero effect on this array.
+
+The escape hatch this same function checks, `event.ignorable === true`, is
+real and honored — but there is **no public way to set it from a live
+`append()` call**. `Session.append()`'s constructed event object
+(`packages/core/session/src/index.ts`, the `append<T>(type, data, ...opts)`
+method) never copies an `ignorable` field in from anywhere; the field can
+only ever land on an event supplied through a session's `seed` at
+construction time (`Session.create(id, events, header)` — restore/import,
+never a live append). Confirmed by the harness's own test suite
+(`packages/core/session/tests/session.spec.ts`): the one accepted way to
+observe `ignorable: true` on an event is to hand-build it into a `seed`
+array, never through `append()`.
+
+**Net effect:** any event type an out-of-tree bundle appends through
+`session.append()` is written durably, but NO harness build — including the
+very process that wrote it — can ever pass that session through
+`PersistenceCoordinator.prepare()` (live resume), `.load()`, `.inspect()`, or
+`.readFrom()` again; all four call `assertEventsSupported` unconditionally
+(same file, ~lines 864/884/900/1310). This is not just an admin/cross-profile
+read problem: it breaks the WRITING process's own "resume last session" the
+next time it restarts, exactly the same way. `dsh-kid-tutor` hit this for
+real: `packages/dsh-kid-tutor/src/events.ts` used the pattern above for five
+event types, and 18 of the 19 real on-disk kid sessions became permanently
+unreadable via `ctx.sessionQuery.readSession()` — `SESSION_QUERY_PERSISTENCE_FAILED`,
+citing exactly the message above.
+
+**The fix that actually works today, in preference order:**
+
+1. *A runtime event-type registration API* — doesn't exist (see the
+   `known-event-types.ts` comment above). Not available until a future dsh
+   release adds one.
+2. *A public `ignorable` parameter on `append()`, plus a lenient read-side
+   config row* — neither exists: `append()`'s signature has no such
+   parameter, and `PersistenceCoordinatorOptions` (the coordinator's only
+   configurable knobs: `preparedSessionCacheSize`, `writeBatchMaxDelayMs`) has
+   no leniency switch either.
+3. **What's actually available and what `dsh-kid-tutor` now does: don't put
+   these facts in dsh's session log at all.** Write them to the bundle's own
+   sidecar file instead — plain `fs.appendFileSync` to
+   `dshHomePath('kid-tutor', 'events', '<sessionId>.jsonl')`, one JSON object
+   per line, completely outside `ctx.sessionPersistence`. This can never trip
+   `assertEventsSupported`, for this process's own future resumes OR anyone
+   else's reads, because dsh's coordinator never sees these lines at all.
+   For sessions that already have the facts baked into dsh's log from before
+   this fix, dsh still offers a **sanctioned, public bypass** for reading
+   them back — never a monkey-patch:
+   - `ctx.sessionPersistence.readRaw(id)` (`SessionPersistence.readRaw`/
+     `supportsRawArtifacts`, `@deepseek-ai/dsh-session-persistence`) returns
+     "the exact durable bytes the backend wrote... without reconstructing
+     from parsed events" (`docs/subsystems/persistence.md` "readRaw") — it
+     decompresses zstd and returns the verbatim JSONL text, and it never
+     calls `assertEventsSupported`.
+   - `decodeStorageRecord(value: unknown): SessionEvent[]`
+     (`@deepseek-ai/dsh-session`, `packages/core/session/src/chunk-rows.ts`)
+     is the same pure, vocabulary-blind per-line decoder the JSONL backend
+     itself uses below the coordinator layer — it expands a packed
+     `text-chunks`/`reasoning-chunks`/`tool-call-chunks` row back to its
+     member events, or passes any other line through unchanged. It never
+     consults `KNOWN_SESSION_EVENT_TYPES`.
+
+   `dsh-kid-tutor-admin/src/raw-session-read.ts` implements exactly this:
+   try `ctx.sessionQuery.readSession()` first, and on a `SessionQueryError`
+   whose `code` is `SESSION_QUERY_PERSISTENCE_FAILED` specifically, fall back
+   to `readRaw` + `decodeStorageRecord`. Cost: this fallback skips the
+   coordinator's own replay/invariant/contiguity validation, so it is a
+   read-only analyst escape hatch, never the default path. It does NOT help
+   the writing process's own live resume — `prepare()` still runs the strict
+   check because it must keep writing to the log afterward, and there is no
+   raw bypass for that. A session written before the sidecar fix is
+   therefore admin-readable forever, but not kid-resumable; a session
+   written after it is both, because its dsh log never contains the
+   offending type to begin with.
 
 **Model-visible, appears in the transcript** (a "notice" the kid should see,
 e.g. redo instructions after a homework-mode block): this is just an ordinary

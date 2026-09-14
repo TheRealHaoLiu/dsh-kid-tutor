@@ -18,6 +18,21 @@ export function defaultKidSessionsDir(): string {
   return join(homedir(), ".dsh-kid", "sessions");
 }
 
+/**
+ * Default kid-tutor audit sidecar root — the mirror image, on the admin
+ * side, of `dsh-kid-tutor/events.ts`'s `kidTutorEventsDir()`
+ * (`dshHomePath('kid-tutor', 'events')` under the KID profile's OWN
+ * `$DSH_HOME`, i.e. `$HOME/.dsh-kid/kid-tutor/events`). Guard-verdict,
+ * tool-denied, quota, python-run, and alert facts live here now instead of
+ * inline in dsh's session log (docs/dsh-seams.md §7 "Known deviation") — the
+ * admin reads both this directory (current sessions) and, for sessions
+ * written before that fix, the raw session log itself via
+ * `raw-session-read.ts`'s fallback.
+ */
+export function defaultKidTutorEventsDir(): string {
+  return join(homedir(), ".dsh-kid", "kid-tutor", "events");
+}
+
 /** Validated admin-bundle configuration. */
 export interface KidAdminConfig {
   /**
@@ -28,6 +43,13 @@ export interface KidAdminConfig {
    * profile's store read-only"). Never written to.
    */
   kidSessionsDir: string;
+  /**
+   * Absolute path to the kid profile's audit sidecar root (see
+   * {@link defaultKidTutorEventsDir}). Read-only, same second-reader safety
+   * argument as `kidSessionsDir` — this directory has exactly one writer,
+   * the kid process itself, and the admin only ever reads it.
+   */
+  kidTutorEventsDir: string;
   /**
    * IANA timezone used to bucket `stats()` counts by local day. Empty string
    * (the default) means "the admin process's own local timezone."
@@ -44,6 +66,7 @@ export interface KidAdminConfig {
 /** Schemastery config for `KidAdminConfig`, matching how dsh's own plugins validate config (e.g. `dsh-tool-goal`'s `Config`). Input is partial (every field has a runtime default); output is the fully-resolved `KidAdminConfig`. */
 export const Config: z<Partial<KidAdminConfig>, KidAdminConfig> = z.object({
   kidSessionsDir: z.string().default(defaultKidSessionsDir()),
+  kidTutorEventsDir: z.string().default(defaultKidTutorEventsDir()),
   timezone: z.string().default(""),
   defaultSince: z.string().default("24h"),
 });
