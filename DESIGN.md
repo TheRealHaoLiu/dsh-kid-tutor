@@ -139,6 +139,26 @@ lives in the bundle; it is all patch rows.
 reversible effects, configured as rows a higher layer can patch? If it needs a
 fork, a monkey patch, or a reach around the tree, it is the wrong design.
 
+## 6a. Admin surface
+
+The parent needs a surface that is **separate from the kid's front end** and that
+can use AI to introspect the kid's activity ("what did they ask about today?",
+"did any guard fire this week?", "show me the redo pairs").
+
+Cordis-native shape: a **second profile**, `kid-admin`, running as its own process
+on its own port. It composes `dsh-base` → `dsh-web-app` → `dsh-kid-tutor-admin`,
+where the admin bundle contributes:
+
+- an **analyst persona** (system-prompt section) for the parent, no tutor rules;
+- **read-only tools** over the kid profile's session store: list sessions, read a
+  session's trajectory, list guard/audit events, list rejected tool calls;
+- a **digest** command that produces the nightly summary on demand.
+
+Separation is by process, profile, port, and model row (the parent may run a
+stronger model). The kid profile never loads the admin bundle and has no tool that
+reads its own store. In phase 2 the admin process is launched by the parent, not
+at boot, so it is not reachable from the kid's OS session unless the parent starts it.
+
 ## 7. Deployment models
 
 ### Phase 1 — homelab host
@@ -181,6 +201,8 @@ file and the process supervisor.
 - Open source, MIT, built in public. The kid's name and any home-network detail
   live in the private patch file, never in this repo.
 - Local link-dependency bundle first; publish only when it stabilizes.
+- Admin surface = separate profile/process/port with AI introspection over the
+  kid's session store (§6a). Never the same web surface as the kid.
 
 ## 9. Rejected alternatives
 
