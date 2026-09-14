@@ -6,6 +6,7 @@
  */
 
 import type {
+  AlertRecord,
   DailyStats,
   GuardEventRecord,
   PythonRunRecord,
@@ -22,15 +23,38 @@ export interface DigestInput {
   deniedTools: ToolDeniedRecord[];
   quotaEvents: QuotaEventRecord[];
   pythonRuns: PythonRunRecord[];
+  alerts: AlertRecord[];
   stats: DailyStats[];
   timezone: string;
 }
 
-/** Compose the plain-text digest: sessions, topics, guard fires, denials, quota hits, python runs. */
+/** Compose the plain-text digest: a "Needs a look" heading (alerts + severity>=1 verdicts) up top, then sessions, topics, guard fires, denials, quota hits, python runs. */
 export function buildDigest(input: DigestInput): string {
   const lines: string[] = [];
   lines.push(`Kid tutor digest since ${input.since}`);
   lines.push("");
+
+  const notableGuardEvents = input.guardEvents.filter(
+    (event) => event.severity !== undefined && event.severity >= 1,
+  );
+  if (input.alerts.length > 0 || notableGuardEvents.length > 0) {
+    lines.push("Needs a look");
+    for (const alert of input.alerts) {
+      const when = formatTimestamp(alert.time, input.timezone);
+      lines.push(
+        `  - [${when}] ALERT ${alert.sessionId} turn ${alert.turn}: ${alert.category} (severity ${alert.severity}) — ${alert.delivered ? "delivered" : `NOT delivered${alert.error !== undefined ? ` (${alert.error})` : ""}`} — ${alert.kidMessagePreview}`,
+      );
+    }
+    for (const event of notableGuardEvents) {
+      const when = formatTimestamp(event.time, input.timezone);
+      lines.push(
+        `  - [${when}] GUARD ${event.sessionId} turn ${event.turn}: ${event.category ?? "none"} (severity ${event.severity}) — ${event.stage} → ${event.verdict}${
+          event.reason !== undefined ? ` (${event.reason})` : ""
+        }`,
+      );
+    }
+    lines.push("");
+  }
 
   lines.push(`Sessions: ${input.sessions.length}`);
   if (input.sessions.length > 0) {
@@ -51,7 +75,22 @@ export function buildDigest(input: DigestInput): string {
     const when = formatTimestamp(event.time, input.timezone);
     lines.push(
       `  - [${when}] ${event.sessionId} turn ${event.turn}: ${event.stage} → ${event.verdict}${
-        event.reason !== undefined ? ` (${event.reason})` : ""
+        event.category !== undefined
+          ? ` [${event.category}, severity ${event.severity}]`
+          : ""
+      }${event.reason !== undefined ? ` (${event.reason})` : ""}`,
+    );
+  }
+  lines.push("");
+
+  lines.push(`Alerts: ${input.alerts.length}`);
+  for (const alert of input.alerts) {
+    const when = formatTimestamp(alert.time, input.timezone);
+    lines.push(
+      `  - [${when}] ${alert.sessionId} turn ${alert.turn}: ${alert.category} (severity ${alert.severity}) — ${
+        alert.delivered
+          ? "delivered"
+          : `NOT delivered${alert.error !== undefined ? ` (${alert.error})` : ""}`
       }`,
     );
   }

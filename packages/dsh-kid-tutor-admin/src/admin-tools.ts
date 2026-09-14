@@ -135,6 +135,10 @@ export function apply(ctx: Context): void {
           ];
           if (e.reason !== undefined) parts.push(`  reason: ${e.reason}`);
           if (e.rule !== undefined) parts.push(`  rule: ${e.rule}`);
+          if (e.category !== undefined)
+            parts.push(
+              `  category: ${e.category}${e.severity !== undefined ? ` (severity ${e.severity})` : ""}`,
+            );
           if (e.suppressedText !== undefined)
             parts.push(`  suppressed text: ${e.suppressedText}`);
           if (e.judgeInput !== undefined)
@@ -230,6 +234,34 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(
     defineTool({
+      name: "kid_alerts",
+      description:
+        "List every parent-alert attempt (a judge classification the parent should be told about), with category, severity, the kid's triggering message, and whether the webhook delivery succeeded, since a given time.",
+      parameters: { since: SINCE_PARAM },
+      output: TEXT_OUTPUT,
+      async execute(args) {
+        const events = await store.alerts({ since: args.since });
+        if (events.length === 0)
+          return withNotice("No alerts in that window.");
+        const lines = events.map((e) => {
+          const parts = [
+            `- ${formatTimestamp(e.time, tz())} | ${e.sessionId} turn ${e.turn} | ${e.category} (severity ${e.severity}) | ${e.delivered ? "delivered" : "NOT delivered"}${e.error !== undefined ? ` (${e.error})` : ""}`,
+          ];
+          parts.push(`  kid message: ${e.kidMessagePreview}`);
+          return parts.join("\n");
+        });
+        return withNotice(lines.join("\n"));
+      },
+      presentCall: () => ({
+        card: "generic",
+        title: "List parent alerts",
+        kind: "read",
+      }),
+    }),
+  );
+
+  ctx.tools.register(
+    defineTool({
       name: "kid_stats",
       description:
         "Per-day counts (sessions, turns, guard fires, denials, quota hits, python runs) since a given time.",
@@ -257,7 +289,7 @@ export function apply(ctx: Context): void {
     defineTool({
       name: "kid_digest",
       description:
-        "A deterministic plain-text digest (no model call): sessions, topics, guard fires, denials, quota hits, and python runs since a given time. Use this before writing your own summary.",
+        "A deterministic plain-text digest (no model call): alerts and non-trivial guard fires (severity >= 1) up top under \"Needs a look\", then sessions, topics, guard fires, denials, quota hits, and python runs since a given time. Use this before writing your own summary.",
       parameters: { since: SINCE_PARAM },
       output: TEXT_OUTPUT,
       async execute(args) {
@@ -268,6 +300,7 @@ export function apply(ctx: Context): void {
           deniedTools,
           quotaEvents,
           pythonRuns,
+          alerts,
           stats,
         ] = await Promise.all([
           store.listSessions({ since }),
@@ -275,6 +308,7 @@ export function apply(ctx: Context): void {
           store.deniedTools({ since }),
           store.quotaEvents({ since }),
           store.pythonRuns({ since }),
+          store.alerts({ since }),
           store.stats({ since }),
         ]);
         return withNotice(
@@ -285,6 +319,7 @@ export function apply(ctx: Context): void {
             deniedTools,
             quotaEvents,
             pythonRuns,
+            alerts,
             stats,
             timezone: tz(),
           }),

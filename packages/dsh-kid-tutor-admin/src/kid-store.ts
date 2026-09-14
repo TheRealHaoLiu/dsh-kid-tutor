@@ -24,6 +24,7 @@ import { Service, type Context } from "@deepseek-ai/cordis";
 import type { SessionEvent, SessionId } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-session-query";
 import "./kid-tutor-events.ts";
+import type { GuardCategory } from "./kid-tutor-events.ts";
 import { Config, resolveSince, dayKey, type KidAdminConfig } from "./config.ts";
 import {
   firstUserMessagePreview,
@@ -70,6 +71,10 @@ export interface GuardEventRecord {
   judgeInput?: string;
   judgeOutput?: string;
   suppressedText?: string;
+  /** Judge-stage only: `undefined` on `stage: 'deterministic'`. */
+  category?: GuardCategory;
+  /** Judge-stage only: `undefined` on `stage: 'deterministic'`. */
+  severity?: number;
 }
 
 export interface ToolDeniedRecord {
@@ -104,6 +109,22 @@ export interface PythonRunRecord {
   exitCode: number;
   durationMs: number;
   truncated: boolean;
+}
+
+export interface AlertRecord {
+  sessionId: string;
+  seq: number;
+  time: number;
+  turn: number;
+  step: number;
+  category: GuardCategory;
+  severity: number;
+  /** The kid's triggering message, truncated to 200 chars (event's `excerpt`). */
+  kidMessagePreview: string;
+  /** Whether the webhook POST actually succeeded. */
+  delivered: boolean;
+  /** Present when `delivered` is false. */
+  error?: string;
 }
 
 export interface SinceOptions {
@@ -266,6 +287,28 @@ export class KidStore extends Service {
           seq: event.seq,
           time: event.time,
           ...event.data,
+        });
+      }
+    }
+    out.sort((a, b) => a.time - b.time);
+    return out;
+  }
+
+  /** Every `kid-tutor/alert` across sessions started at/after `since`. */
+  async alerts(options: SinceOptions = {}): Promise<AlertRecord[]> {
+    const out: AlertRecord[] = [];
+    for await (const { sessionId, events } of this.eachEventSince(
+      options.since,
+    )) {
+      for (const event of events) {
+        if (event.type !== "kid-tutor/alert") continue;
+        const { excerpt, ...rest } = event.data;
+        out.push({
+          sessionId,
+          seq: event.seq,
+          time: event.time,
+          kidMessagePreview: excerpt,
+          ...rest,
         });
       }
     }

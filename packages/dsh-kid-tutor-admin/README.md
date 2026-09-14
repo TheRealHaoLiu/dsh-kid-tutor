@@ -51,14 +51,24 @@ Override in `profiles/kid-admin/cordis.patch.yml`:
 ## Tools (`admin-tools.ts`)
 
 `kid_list_sessions`, `kid_read_session`, `kid_guard_events`, `kid_denied_tools`,
-`kid_quota_events`, `kid_python_runs`, `kid_stats`, `kid_digest`. Every result
-opens with an explicit notice that the kid's and model's own words inside it
-are quoted content, not instructions — the same untrusted-content posture
-DESIGN.md §2 applies to the kid's own tool results.
+`kid_quota_events`, `kid_python_runs`, `kid_alerts`, `kid_stats`, `kid_digest`.
+Every result opens with an explicit notice that the kid's and model's own
+words inside it are quoted content, not instructions — the same
+untrusted-content posture DESIGN.md §2 applies to the kid's own tool results.
+
+`kid_guard_events` includes each judge-stage verdict's `category`/`severity`
+classification (per docs/CONTRACT.md) when present; a deterministic-stage
+verdict never carries one. `kid_alerts` lists every `kid-tutor/alert` attempt
+(category, severity, the kid's triggering message, and whether the parent
+webhook actually delivered) — the durable record of what `parent-alert.ts`
+tried to tell the parent, independent of whether it succeeded.
 
 `kid_digest` is deterministic (`src/digest.ts`): no model call, so it is a
 safe first move for any "what happened" question and gives the analyst model
-a bias-free starting point.
+a bias-free starting point. It puts alerts and any guard verdict with
+`severity >= 1` up front under a "Needs a look" heading, ahead of the
+ordinary sessions/guard-fires/denials/quota/python-runs sections, so the
+parent-relevant signal is never buried below routine activity.
 
 ## Build & test
 
@@ -88,6 +98,23 @@ NAMES (never values) for inspection.
 
 ## Known limitations / unverified
 
+- **Most real on-disk kid sessions currently fail to read at all**, admin
+  bundle unchanged: a read-only smoke check of the real
+  `~/.dsh-kid/sessions` (19 sessions) found only 1 readable through
+  `ctx.sessionQuery` — the other 18 threw `SESSION_QUERY_PERSISTENCE_FAILED`
+  ("contains event type \"kid-tutor/quota\" ... unknown to this harness and
+  not marked ignorable"). Confirmed directly against the raw `.jsonl.zstd`
+  bytes (via `zstd -d`): the persisted `kid-tutor/quota` event genuinely has
+  no `ignorable` field. This is a `packages/dsh-kid-tutor` writer issue, not
+  an admin-bundle one, and out of this package's scope to fix: `Session.append<T>(type,
+  data, ...opts)`'s public signature only accepts a `SurfaceIntent` (`opts[0]`)
+  for `SurfaceEventType`s and `[]` otherwise — there is currently no
+  parameter on the public API through which a plugin's `session.append(...)`
+  call can set the envelope's own `ignorable: true`, despite
+  docs/dsh-seams.md's own `kid-tutor/guard-verdict` append example assuming
+  it works. Until `dsh-kid-tutor` (or a future `dsh-session` release) closes
+  that gap, this admin bundle's tools will throw on almost every real kid
+  session that contains any `kid-tutor/*` log-only event.
 - **`!!js ctx.kidAdminConfig.kidSessionsDir` inside a nested `cordis:group`
   row, referencing an earlier top-level row in the SAME patch file** —
   plausible by analogy to `ctx.webStartup` (docs/dsh-seams.md §8), and it
