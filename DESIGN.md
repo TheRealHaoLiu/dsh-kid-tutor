@@ -159,6 +159,31 @@ stronger model). The kid profile never loads the admin bundle and has no tool th
 reads its own store. In phase 2 the admin process is launched by the parent, not
 at boot, so it is not reachable from the kid's OS session unless the parent starts it.
 
+## 6b. Corrections from reconnaissance (2026-09-14)
+
+Reading dsh source ([docs/dsh-seams.md](docs/dsh-seams.md)) changed four premises:
+
+1. **Web sessions are shaped by an agent preset, not the bundle patch.** The web
+   bundle disables tools at the host layer and re-enables them per session from
+   `agent.cordis.yml`. So the kid's persona, tool roster, guard and quota rows live
+   in a **preset** (`presets/kid/`), and the bundle carries only host-plane rows.
+   Still Cordis-native: same row shape, different plane.
+2. **`web_fetch` is an SSRF primitive** by its own README. The domain allowlist in
+   `tools/pre-execute` is the only thing between the kid's prompt and the LAN. It
+   also rejects literal IPs, private ranges, and local hostnames.
+3. **No Python runtime exists in dsh.** `run_code` is TypeScript only. Phase 1
+   ships a custom `run_python` tool: a `python3` subprocess confined to the
+   workspace, isolated mode, timeout, output cap, no argv passthrough. It is not
+   a shell. A proper `ctx.codeRuntime` Python backend is later work.
+4. **The web UI cannot be re-skinned from a bundle.** Branding is a Vite
+   build-time concern. Phase 1 uses the stock chat window; kid-friendliness comes
+   from persona tone and the surfaces dsh already renders.
+
+Also: the flash model id is `deepseek-v4-flash` on `deepseek-official`, and the
+nested-call pattern inside `llm/stream` is real (recursion guard =
+`isAgentLoopRequest` / `markAgentLoopRequest`, precedent: the session-title
+plugin). Both former open questions are closed.
+
 ## 7. Deployment models
 
 ### Phase 1 — homelab host
@@ -220,11 +245,9 @@ file and the process supervisor.
 
 ## 10. Open questions
 
-- Exact model id for the DeepSeek flash route — verify against the live catalog
-  at charter time; never from memory.
-- Does the `llm/stream` waterfall in the current dsh release allow a nested call
-  from inside a listener as cleanly as the docs suggest? Prove in a spike before
-  the charter.
+- A real `ctx.codeRuntime` Python backend to replace the phase-1 subprocess tool.
+- Kid-friendly re-skin: requires building the web frontend from source; decide
+  whether that is worth owning.
 - Whether the web bundle's trust fence needs any change for the phase-1 LAN host
   (it binds loopback by default and prints a LAN URL).
 - Digest privacy line: counts and fired guards only, or session excerpts? Parent's
