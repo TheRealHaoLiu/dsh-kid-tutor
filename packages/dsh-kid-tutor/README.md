@@ -297,9 +297,12 @@ pnpm --filter dsh-kid-tutor run check   # tsc -p tsconfig.json --noEmit
 pnpm --filter dsh-kid-tutor run test    # vitest run
 ```
 
-All three pass as of this writing: `check` is clean, and `test` runs 48 unit tests across
-6 files (net/paths/quota/output-guard pure-logic/persona-name/tool-policy) — all pure
-functions; nothing here boots a real Cordis context or hits a network.
+All three pass as of this writing (also via the root `pnpm run check`/`pnpm run test`,
+which run both this package and `dsh-kid-tutor-admin` together): `check` is clean, and
+`test` runs 80 unit tests across 9 files (net, paths, quota, output-guard, brevity,
+parent-alert, persona-name, tool-policy, kid-ui) — all pure functions or a bare `new
+Context()` with no other plugins mounted; nothing here boots a real Cordis host tree or
+hits a real network (`parent-alert.spec.ts` stubs `fetch`).
 
 ## Smoke test performed (real DeepSeek calls)
 
