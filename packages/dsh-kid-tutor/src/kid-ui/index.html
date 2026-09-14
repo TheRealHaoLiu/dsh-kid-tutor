@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Chat</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #fdf9f0;
+    --ink: #1b1730;
+    --kid-bubble: #ffe27a;
+    --kid-ink: #1b1730;
+    --tutor-bubble: #1b1730;
+    --tutor-ink: #fdf9f0;
+    --notice-bg: #eadcff;
+    --notice-ink: #3a2a63;
+    --accent: #5b3df0;
+    --accent-ink: #ffffff;
+    --border: #d8cdae;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    padding-top: max(14px, env(safe-area-inset-top));
+    border-bottom: 3px solid var(--border);
+    background: var(--bg);
+  }
+  header h1 {
+    margin: 0;
+    font-size: clamp(22px, 6vw, 32px);
+    line-height: 1.15;
+  }
+  #newChatButton {
+    flex: 0 0 auto;
+    border: 2px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  #newChatButton:active { background: var(--accent); color: var(--accent-ink); }
+
+  main#conversation {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .bubble {
+    max-width: 82%;
+    padding: 12px 16px;
+    border-radius: 20px;
+    font-size: clamp(17px, 4.4vw, 20px);
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .bubble pre {
+    background: rgba(0, 0, 0, 0.35);
+    color: #f4f4f4;
+    padding: 10px 12px;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-size: 0.85em;
+    white-space: pre;
+  }
+  .bubble.tutor pre { background: rgba(255, 255, 255, 0.15); }
+  .bubble code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .bubble.kid {
+    align-self: flex-end;
+    background: var(--kid-bubble);
+    color: var(--kid-ink);
+    border-bottom-right-radius: 6px;
+  }
+  .bubble.tutor {
+    align-self: flex-start;
+    background: var(--tutor-bubble);
+    color: var(--tutor-ink);
+    border-bottom-left-radius: 6px;
+  }
+  .bubble.notice {
+    align-self: center;
+    background: var(--notice-bg);
+    color: var(--notice-ink);
+    font-style: italic;
+    text-align: center;
+    max-width: 92%;
+    font-size: clamp(15px, 4vw, 17px);
+  }
+
+  footer {
+    border-top: 3px solid var(--border);
+    padding: 10px 16px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    background: var(--bg);
+  }
+  #status {
+    min-height: 1.4em;
+    font-size: 16px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #status:empty { visibility: hidden; }
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 3px solid var(--accent);
+    border-top-color: transparent;
+    animation: spin 0.8s linear infinite;
+    flex: 0 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #composer {
+    display: flex;
+    gap: 10px;
+  }
+  #messageInput {
+    flex: 1 1 auto;
+    font-size: clamp(17px, 4.4vw, 20px);
+    padding: 12px 16px;
+    border-radius: 999px;
+    border: 2px solid var(--border);
+    background: #fff;
+    color: var(--ink);
+    min-width: 0;
+  }
+  #messageInput:focus { outline: 3px solid var(--accent); border-color: var(--accent); }
+  #sendButton {
+    flex: 0 0 auto;
+    font-size: clamp(16px, 4vw, 19px);
+    font-weight: 700;
+    padding: 12px 22px;
+    border-radius: 999px;
+    border: none;
+    background: var(--accent);
+    color: var(--accent-ink);
+    cursor: pointer;
+  }
+  #sendButton:disabled { opacity: 0.5; cursor: default; }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #171321;
+      --ink: #f4f1ff;
+      --kid-bubble: #ffcf4d;
+      --kid-ink: #241a00;
+      --tutor-bubble: #2c2445;
+      --tutor-ink: #f4f1ff;
+      --notice-bg: #3a2f5c;
+      --notice-ink: #e6dbff;
+      --accent: #9a86ff;
+      --accent-ink: #171321;
+      --border: #3a3252;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #171321;
+    --ink: #f4f1ff;
+    --kid-bubble: #ffcf4d;
+    --kid-ink: #241a00;
+    --tutor-bubble: #2c2445;
+    --tutor-ink: #f4f1ff;
+    --notice-bg: #3a2f5c;
+    --notice-ink: #e6dbff;
+    --accent: #9a86ff;
+    --accent-ink: #171321;
+    --border: #3a3252;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1 id="titleText">Hi!</h1>
+    <button id="newChatButton" type="button">New chat</button>
+  </header>
+
+  <main id="conversation" aria-live="polite" aria-label="Conversation"></main>
+
+  <footer>
+    <div id="status" role="status" aria-live="polite"></div>
+    <form id="composer" autocomplete="off">
+      <input id="messageInput" type="text" placeholder="Type here…" aria-label="Message" maxlength="4000" />
+      <button id="sendButton" type="submit">Send</button>
+    </form>
+  </footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "dshKidSessionId";
+
+  var els = {
+    title: document.getElementById("titleText"),
+    conversation: document.getElementById("conversation"),
+    status: document.getElementById("status"),
+    composer: document.getElementById("composer"),
+    input: document.getElementById("messageInput"),
+    sendButton: document.getElementById("sendButton"),
+    newChatButton: document.getElementById("newChatButton"),
+  };
+
+  var state = {
+    sessionId: null,
+    sending: false,
+    assistantEl: null,
+    assistantText: "",
+    mux: null,
+    muxRetryMs: 1000,
+  };
+
+  // ---- tiny helpers ----------------------------------------------------
+
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  /** **bold** / *italic* -> real tags, on already-escaped text so this never opens an HTML hole. */
+  function applyEmphasis(escapedText) {
+    return escapedText
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  }
+
+  /* Minimal markdown: fenced code-fence blocks go monospace (untouched by emphasis); everything else gets bold/italic emphasis applied. */
+  function renderText(text) {
+    var parts = String(text == null ? "" : text).split(/```/);
+    var html = "";
+    for (var i = 0; i < parts.length; i++) {
+      if (i % 2 === 1) {
+        var body = parts[i].replace(/^[^\n]*\n/, "");
+        html += "<pre><code>" + escapeHtml(body) + "</code></pre>";
+      } else {
+        html += applyEmphasis(escapeHtml(parts[i]));
+      }
+    }
+    return html;
+  }
+
+  /**
+   * Plugin names allowed to surface a notice bubble. dsh's OWN plugin-sourced
+   * `user/message` events (e.g. `@deepseek-ai/dsh-system-prompt`'s "Current
+   * runtime context… DSH file policy…" snapshot) use the identical
+   * `source.kind === "plugin"` shape and must never reach the kid — only our
+   * own quota/output-guard notices (`source.plugin === "dsh-kid-tutor"`,
+   * see packages/dsh-kid-tutor/src/{quota,output-guard}.ts) are meant to be
+   * seen.
+   */
+  var OWN_PLUGIN_NAMES = ["dsh-kid-tutor"];
+  function isOwnPluginNotice(source) {
+    return !!source && source.kind === "plugin" && OWN_PLUGIN_NAMES.indexOf(source.plugin) !== -1;
+  }
+
+  function textFromContent(content) {
+    if (!Array.isArray(content)) return "";
+    var out = [];
+    for (var i = 0; i < content.length; i++) {
+      var block = content[i];
+      if (block && block.type === "text" && typeof block.text === "string") out.push(block.text);
+    }
+    return out.join("\n");
+  }
+
+  function scrollToBottom() {
+    els.conversation.scrollTop = els.conversation.scrollHeight;
+  }
+
+  function addBubble(role, text) {
+    var div = document.createElement("div");
+    div.className = "bubble " + role;
+    div.innerHTML = renderText(text);
+    els.conversation.appendChild(div);
+    scrollToBottom();
+    return div;
+  }
+
+  function updateBubble(el, text) {
+    el.innerHTML = renderText(text);
+    scrollToBottom();
+  }
+
+  function setStatus(text) {
+    if (!text) {
+      els.status.innerHTML = "";
+      return;
+    }
+    els.status.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>' + escapeHtml(text) + "</span>";
+  }
+
+  function setSending(sending) {
+    state.sending = sending;
+    els.sendButton.disabled = sending;
+    els.input.disabled = sending;
+  }
+
+  var TOOL_NOTES = {
+    web_search: "Looking that up…",
+    web_fetch: "Reading a web page…",
+    run_python: "Running your program…",
+  };
+  function toolNote(name) {
+    return TOOL_NOTES[name] || "Working on it…";
+  }
+
+  // ---- talking to dsh's own /api surface --------------------------------
+
+  function apiCall(method, payload) {
+    var rpcId = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()) + Date.now());
+    return fetch("/api/" + method, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "client-request", rpcId: rpcId, method: method, payload: payload || {} }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (body) {
+        var result = body && body.result;
+        if (!result || result.ok !== true) {
+          var message = (result && result.error && result.error.message) || "request failed";
+          throw new Error(message);
+        }
+        return result.value;
+      });
+  }
+
+  function createOrResumeSession(previousSessionId) {
+    return fetch("/kid/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(previousSessionId ? { sessionId: previousSessionId } : {}),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (result) {
+        if (!result || result.ok !== true) {
+          var message = (result && result.error && result.error.message) || "could not start chat";
+          throw new Error(message);
+        }
+        return result.value.sessionId;
+      });
+  }
+
+  function loadHistory(sessionId) {
+    return apiCall("session.history", { sessionId: sessionId }).then(function (value) {
+      var events = (value && value.events) || [];
+      for (var i = 0; i < events.length; i++) {
+        var event = events[i].event;
+        if (!event) continue;
+        if (event.type === "user/message") {
+          var source = event.data && event.data.source;
+          var text = textFromContent(event.data && event.data.content);
+          if (!text) continue;
+          if (source && source.kind === "plugin") {
+            // Only OUR plugin's notices are meant for the kid; dsh's own
+            // plugin-sourced injections (runtime-context snapshots, etc.)
+            // stay hidden — see isOwnPluginNotice's doc comment.
+            if (isOwnPluginNotice(source)) addBubble("notice", text);
+          } else {
+            addBubble("kid", text);
+          }
+        } else if (event.type === "assistant/message") {
+          var message = event.data && event.data.message;
+          var atext = textFromContent(message && message.content);
+          if (atext) addBubble("tutor", atext);
+        }
+      }
+    });
+  }
+
+  // ---- the events.mux WebSocket -----------------------------------------
+
+  function connectMux() {
+    var scheme = location.protocol === "https:" ? "wss:" : "ws:";
+    var socket = new WebSocket(scheme + "//" + location.host + "/api/events.mux");
+    state.mux = socket;
+    socket.onopen = function () {
+      state.muxRetryMs = 1000;
+    };
+    socket.onmessage = function (evt) {
+      var message;
+      try {
+        message = JSON.parse(evt.data);
+      } catch (e) {
+        return;
+      }
+      handleFrame(message && message.payload);
+    };
+    socket.onclose = function () {
+      if (state.mux !== socket) return; // superseded, not a real drop
+      state.mux = null;
+      setTimeout(connectMux, state.muxRetryMs);
+      state.muxRetryMs = Math.min(state.muxRetryMs * 2, 15000);
+    };
+    socket.onerror = function () {
+      socket.close();
+    };
+  }
+
+  function finalizeAssistantBubble(text) {
+    if (!state.assistantEl) state.assistantEl = addBubble("tutor", "");
+    updateBubble(state.assistantEl, text);
+    state.assistantEl = null;
+    state.assistantText = "";
+  }
+
+  function handleFrame(frame) {
+    if (!frame) return;
+    if (frame.type === "stream/error") {
+      setStatus("");
+      setSending(false);
+      addBubble("notice", "Hmm, something went wrong. Try asking again.");
+      return;
+    }
+    if (frame.type !== "session/event") return;
+    if (!state.sessionId || frame.sessionId !== state.sessionId) return;
+
+    var event = frame.event;
+    if (!event) return;
+
+    switch (event.type) {
+      case "assistant/chunk": {
+        var chunk = event.data && event.data.chunk;
+        if (chunk && chunk.type === "text-delta") {
+          if (!state.assistantEl) {
+            state.assistantEl = addBubble("tutor", "");
+            state.assistantText = "";
+          }
+          state.assistantText += chunk.text;
+          updateBubble(state.assistantEl, state.assistantText);
+          setStatus("");
+        }
+        break;
+      }
+      case "tool/call": {
+        setStatus(toolNote(event.data && event.data.name));
+        break;
+      }
+      case "tool/result": {
+        setStatus("");
+        break;
+      }
+      case "assistant/message": {
+        // NOT the "done" signal: a turn can run more steps after this one
+        // (e.g. a reply, then a tool call, then another reply) — only
+        // `turn/end` means the whole turn is over. Keep the thinking
+        // indicator and the disabled input until then.
+        var message = event.data && event.data.message;
+        finalizeAssistantBubble(textFromContent(message && message.content));
+        break;
+      }
+      case "user/message": {
+        // Our own optimistic bubble already covers a kid-typed prompt. Of
+        // plugin-sourced messages, only OUR plugin's notices (quota cutoff,
+        // guard redo) are new information for the kid — dsh's own
+        // plugin-sourced injections (e.g. the runtime-context snapshot from
+        // `@deepseek-ai/dsh-system-prompt`) must never surface here.
+        var source = event.data && event.data.source;
+        if (isOwnPluginNotice(source)) {
+          addBubble("notice", textFromContent(event.data && event.data.content));
+        }
+        break;
+      }
+      case "turn/end": {
+        setStatus("");
+        setSending(false);
+        break;
+      }
+      default:
+        break; // kid-tutor/* audit events and everything else stay log-only, never surfaced here.
+    }
+  }
+
+  // ---- sending -----------------------------------------------------------
+
+  function ensureSession() {
+    if (state.sessionId) return Promise.resolve(state.sessionId);
+    var stored = null;
+    try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+    return createOrResumeSession(stored).then(function (sessionId) {
+      state.sessionId = sessionId;
+      try { localStorage.setItem(STORAGE_KEY, sessionId); } catch (e) {}
+      return sessionId;
+    });
+  }
+
+  function sendMessage(text) {
+    setSending(true);
+    setStatus("Thinking…");
+    ensureSession()
+      .then(function (sessionId) {
+        return apiCall("session.prompt", {
+          sessionId: sessionId,
+          mode: "queue",
+          content: [{ type: "text", text: text }],
+        });
+      })
+      .catch(function (err) {
+        setSending(false);
+        setStatus("");
+        addBubble("notice", "Hmm, I couldn't send that. Try again?");
+        console.error(err);
+      });
+  }
+
+  els.composer.addEventListener("submit", function (evt) {
+    evt.preventDefault();
+    if (state.sending) return;
+    var text = els.input.value.trim();
+    if (!text) return;
+    els.input.value = "";
+    addBubble("kid", text);
+    sendMessage(text);
+  });
+
+  els.newChatButton.addEventListener("click", function () {
+    state.sessionId = null;
+    state.assistantEl = null;
+    state.assistantText = "";
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    els.conversation.innerHTML = "";
+    setStatus("");
+    setSending(false);
+    els.input.focus();
+  });
+
+  // ---- boot ----------------------------------------------------------------
+
+  fetch("/kid/config")
+    .then(function (res) { return res.json(); })
+    .then(function (config) {
+      var name = (config && config.kidName) || "friend";
+      els.title.textContent = "Hi, " + name + "!";
+      document.title = "Chat with Robo";
+    })
+    .catch(function () {});
+
+  connectMux();
+
+  (function resume() {
+    var stored = null;
+    try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+    if (!stored) return;
+    state.sessionId = stored;
+    loadHistory(stored).catch(function () {
+      // Stored session id is gone (session-not-found or similar): start clean.
+      state.sessionId = null;
+      try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+      els.conversation.innerHTML = "";
+    });
+  })();
+})();
+</script>
+</body>
+</html>

@@ -27,3 +27,31 @@
 - insert:
     - id: web-fetch-http
       name: '@deepseek-ai/dsh-web-fetch-http'
+
+# `kid-ui` — the knob-free kid front end (docs/dsh-seams.md §8 / DESIGN.md §8
+# "Decided" reversal). Host-plane because it needs `ctx.webServer` (the same
+# `@deepseek-ai/dsh-host-webserver` instance `@deepseek-ai/dsh-web-app`
+# serves the stock chat UI from) and `ctx.apiProxy` (the same gateway the
+# stock UI's `/api/*` routes wrap), both of which only exist on the host
+# Loader tree — a preset row cannot see either. `inject: ['webServer',
+# 'apiProxy']` on the plugin itself (not restated here) makes the Loader wait
+# for `@deepseek-ai/dsh-web-app`'s rows regardless of `dsh.profile.bundles`
+# order, so this bundle does not need to sit after it in that list, though it
+# already does (profiles/kid/package.json).
+#
+# `presetId: kid` and `workspaceRoot` are server-side facts a browser can
+# never override (`kid-ui.ts`'s `/kid/session` route strips every other field
+# from the client body) — see DESIGN.md §8 and the module's own doc comment.
+# `path: '/'` claims the SAME exact webserver path the stock frontend's
+# fallback would otherwise answer with the knobby chat UI; an exact-route hit
+# is checked before the fallback seat regardless of load order
+# (`@deepseek-ai/dsh-host-webserver`'s `WebServer.match()`), so the stock UI
+# needed no disabling and no edit to profiles/kid/cordis.patch.yml or
+# presets/kid/agent.cordis.yml was necessary for this row to work.
+- insert:
+    - id: kid-ui
+      name: 'dsh-kid-tutor/kid-ui'
+      config:
+        enabled: true
+        path: '/'
+        presetId: kid

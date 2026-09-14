@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_BLOCKED_PATTERNS } from "../src/config.ts";
-import { parseJudgeVerdict, runDeterministicStage } from "../src/output-guard.ts";
+import {
+  parseJudgeVerdict,
+  runDeterministicStage,
+  splitIntoPacingChunks,
+} from "../src/output-guard.ts";
 
 describe("runDeterministicStage", () => {
   it("passes ordinary kid-safe text", () => {
@@ -37,21 +41,28 @@ describe("runDeterministicStage", () => {
 });
 
 describe("parseJudgeVerdict", () => {
-  it("parses a clean JSON object", () => {
+  it("parses a clean JSON object, defaulting category/severity when absent", () => {
     expect(parseJudgeVerdict('{"verdict":"pass","reason":"fine"}')).toEqual({
       verdict: "pass",
       reason: "fine",
+      category: "none",
+      severity: 0,
     });
   });
 
   it("parses JSON embedded in surrounding prose", () => {
-    expect(parseJudgeVerdict('Sure, here it is: {"verdict":"redo","reason":"gives the answer away"} thanks')).toEqual(
-      { verdict: "redo", reason: "gives the answer away" },
-    );
+    expect(
+      parseJudgeVerdict('Sure, here it is: {"verdict":"redo","reason":"gives the answer away"} thanks'),
+    ).toEqual({ verdict: "redo", reason: "gives the answer away", category: "none", severity: 0 });
   });
 
   it("defaults a missing reason to an empty string", () => {
-    expect(parseJudgeVerdict('{"verdict":"block"}')).toEqual({ verdict: "block", reason: "" });
+    expect(parseJudgeVerdict('{"verdict":"block"}')).toEqual({
+      verdict: "block",
+      reason: "",
+      category: "none",
+      severity: 0,
+    });
   });
 
   it("returns undefined for invalid JSON", () => {
@@ -64,5 +75,50 @@ describe("parseJudgeVerdict", () => {
 
   it("returns undefined for JSON that isn't an object", () => {
     expect(parseJudgeVerdict('"just a string"')).toBeUndefined();
+  });
+
+  it("parses a valid category and severity", () => {
+    expect(
+      parseJudgeVerdict('{"verdict":"block","reason":"unsafe","category":"violence","severity":2}'),
+    ).toEqual({ verdict: "block", reason: "unsafe", category: "violence", severity: 2 });
+  });
+
+  it("falls back to category none for an unrecognized category string", () => {
+    const parsed = parseJudgeVerdict('{"verdict":"pass","reason":"ok","category":"not-a-real-one","severity":1}');
+    expect(parsed?.category).toBe("none");
+  });
+
+  it("clamps an out-of-range severity into 0-2", () => {
+    expect(parseJudgeVerdict('{"verdict":"pass","reason":"ok","severity":99}')?.severity).toBe(2);
+    expect(parseJudgeVerdict('{"verdict":"pass","reason":"ok","severity":-5}')?.severity).toBe(0);
+  });
+
+  it("treats a non-integer severity as 0", () => {
+    expect(parseJudgeVerdict('{"verdict":"pass","reason":"ok","severity":1.5}')?.severity).toBe(0);
+  });
+});
+
+describe("splitIntoPacingChunks", () => {
+  it("reconstructs the original text exactly when concatenated", () => {
+    const text = "Great question, TestKid! Volcanoes are like Earth's pressure valves.";
+    expect(splitIntoPacingChunks(text).join("")).toBe(text);
+  });
+
+  it("splits into word-plus-trailing-whitespace pieces", () => {
+    expect(splitIntoPacingChunks("Hello world")).toEqual(["Hello ", "world"]);
+  });
+
+  it("handles leading whitespace without losing it", () => {
+    const text = "  leading space";
+    expect(splitIntoPacingChunks(text).join("")).toBe(text);
+  });
+
+  it("returns an empty array for an empty string", () => {
+    expect(splitIntoPacingChunks("")).toEqual([]);
+  });
+
+  it("handles multi-line text", () => {
+    const text = "Line one.\nLine two.";
+    expect(splitIntoPacingChunks(text).join("")).toBe(text);
   });
 });

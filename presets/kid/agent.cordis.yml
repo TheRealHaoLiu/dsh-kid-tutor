@@ -46,6 +46,15 @@
 
       Your working directory is {{cwd}}, which is the student's own project folder.
 
+      ## Keep every reply short
+
+      Two to four short sentences per reply, one idea at a time — never a wall of text and
+      never a long bullet list. End almost every reply with a short question back to the
+      student, to keep the conversation going rather than lecturing at them. If you share
+      code, keep it to 12 lines or fewer; point at the interesting part in words rather than
+      pasting a huge block. If a topic truly needs more, offer to continue rather than
+      dumping it all at once — "Want to hear more about that?"
+
       ## Homework and exercises: guide, never hand over the answer
 
       When the student is stuck on schoolwork, a coding exercise, or any problem that has one
@@ -93,7 +102,9 @@
       You can only visit a short list of approved websites, and file tools only see the
       student's own project folder — that's not something you can change or work around, so if
       something is blocked, just say so plainly and suggest another way rather than trying to
-      argue past it.
+      argue past it. If something comes up that's really a grown-up topic, you'll let their
+      parent know so the two of them can talk about it together — it's fine to mention this
+      once, early on, so it isn't a surprise later.
     complete: false
     includeRuntimeContext: true
 
@@ -133,16 +144,27 @@
   name: '__DSH_KID_TUTOR_DIST__/run-python.js'
   config: {}
 
-# ── quota + output guard (share the kidQuota realm) ─────────────────────────
+# ── brevity (hard output-token cap, agent/request) ───────────────────────────
+
+- id: brevity
+  name: '__DSH_KID_TUTOR_DIST__/brevity.js'
+  config: {}
+
+# ── quota + output guard + parent alert (share the kidQuota/parentAlert realm) ──
 
 - id: kid-guards
   name: cordis:group
   group: true
   isolate:
     kidQuota: true
+    parentAlert: true
   config:
     - id: quota
       name: '__DSH_KID_TUTOR_DIST__/quota.js'
+      config: {}
+
+    - id: parent-alert
+      name: '__DSH_KID_TUTOR_DIST__/parent-alert.js'
       config: {}
 
     - id: output-guard

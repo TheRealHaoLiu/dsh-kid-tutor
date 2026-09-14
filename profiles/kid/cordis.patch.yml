@@ -17,12 +17,17 @@
     default: kid
 
 # Pin the model route explicitly rather than relying on dsh-base's own
-# default (currently the same route) staying unchanged upstream.
+# default staying unchanged upstream. `deepseek-v4-flash` was retired as an
+# alias now served by V4.1-Flash; `deepseek-flash` is the live route.
+# Verified (packages/llm/llm-deepseek/src/index.ts `resolveModels()`) that
+# the adapter's `models` catalog is advisory-only for discovery/UI display —
+# `stream()` forwards whatever `model` string a request carries with no
+# membership check — so this needs no matching `models` catalog edit.
 - id: agent-default-model
   name: '@deepseek-ai/dsh-agent-default-model'
   config:
     provider: deepseek-official
-    model: deepseek-v4-flash
+    model: deepseek-flash
 
 # Default port 3081 for a boot-time service that doesn't want to remember a
 # --port flag every launch; --port still overrides (docs/dsh-seams.md §8).

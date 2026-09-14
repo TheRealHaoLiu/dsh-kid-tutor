@@ -3,3 +3,5 @@ node_modules/
 dist/
 coverage/
 
+profiles/*/pnpm-lock.yaml
+packages/*/pnpm-lock.yaml

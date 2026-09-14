@@ -228,6 +228,26 @@ file and the process supervisor.
 - Local link-dependency bundle first; publish only when it stabilizes.
 - Admin surface = separate profile/process/port with AI introspection over the
   kid's session store (§6a). Never the same web surface as the kid.
+- **Reversal (2026-09-14): the kid gets a minimal custom front end
+  (`packages/dsh-kid-tutor/src/kid-ui.ts` + `src/kid-ui/index.html`), not the stock dsh
+  web UI.** §6b/§10 had left this as "phase 1 uses the stock chat window" because
+  re-skinning it requires owning a from-source frontend build (§0.4/§9's own "A kid-facing
+  custom front end from day one... real maintenance bill"). The parent's actual
+  requirement — far fewer knobs than dsh's stock UI: no model picker, no preset picker, no
+  trajectory/step viewer, no settings, no workspace picker — cannot be met by persona tone
+  alone, since those are UI chrome the stock frontend always renders regardless of what the
+  model says or does. The reversal is a **second, additive front end**, not a fork of the
+  first: a self-contained page (inline CSS/JS, no build step, no CDN) served from an exact
+  webserver route that wins over the stock UI's fallback route without disabling any dsh
+  row, talking to the identical `/api/session.*` + `events.mux` surface the stock UI
+  uses, with the session's workspace root and agent preset pinned server-side so the
+  browser can never choose either. See `packages/dsh-kid-tutor/README.md`'s "Kid UI"
+  section for the exact routes and protocol.
+  - **Rejected alternative:** rebuilding `dsh-web-frontend` from source with a
+    `DSH_CLIENT_*` kid build profile. Owning an upstream frontend build (its own Vite
+    config, its own release/rebase burden against `deepseek-harness` upstream) is a much
+    larger maintenance bill than one static HTML file, for a UI surface this project needs
+    to be deliberately small rather than deliberately complete.
 
 ## 9. Rejected alternatives
 

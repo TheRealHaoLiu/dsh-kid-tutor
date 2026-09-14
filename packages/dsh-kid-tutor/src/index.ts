@@ -21,3 +21,6 @@ export * as runPython from "./run-python.ts";
 export * as personaName from "./persona-name.ts";
 export * as outputGuard from "./output-guard.ts";
 export * as quota from "./quota.ts";
+export * as kidUi from "./kid-ui.ts";
+export * as brevity from "./brevity.ts";
+export * as parentAlert from "./parent-alert.ts";

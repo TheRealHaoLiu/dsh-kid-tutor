@@ -17,10 +17,12 @@
     "./run-python": { "types": "./dist/run-python.d.ts", "default": "./dist/run-python.js" },
     "./quota": { "types": "./dist/quota.d.ts", "default": "./dist/quota.js" },
     "./output-guard": { "types": "./dist/output-guard.d.ts", "default": "./dist/output-guard.js" },
-    "./persona-name": { "types": "./dist/persona-name.d.ts", "default": "./dist/persona-name.js" }
+    "./persona-name": { "types": "./dist/persona-name.d.ts", "default": "./dist/persona-name.js" },
+    "./kid-ui": { "types": "./dist/kid-ui.d.ts", "default": "./dist/kid-ui.js" }
   },
   "files": [
     "dist",
+    "src/kid-ui/index.html",
     "cordis.patch.yml"
   ],
   "dsh": {
@@ -49,7 +51,9 @@
     "@deepseek-ai/dsh-system-prompt": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-home-paths": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-timeout": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-web-fetch-http": "^0.0.1-rc.5"
+    "@deepseek-ai/dsh-web-fetch-http": "^0.0.1-rc.5",
+    "@deepseek-ai/dsh-host-webserver": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-host-apiproxy": "^0.1.1-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -61,6 +65,8 @@
     "@deepseek-ai/dsh-system-prompt": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-home-paths": "^0.1.1-rc.2",
     "@deepseek-ai/dsh-timeout": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-host-apiproxy": "^0.1.1-rc.2",
     "@types/node": "^22.0.0",
     "prettier": "^3.5.0",
     "typescript": "^5.7.0",

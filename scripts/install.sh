@@ -3,11 +3,15 @@
 # bundle, then materializes a dedicated $DSH_HOME under $HOME/.dsh-kid with
 # its own profile, agent preset, workspace, credentials, and settings.
 #
-# Env:
-#   KID_NAME       - the kid's name, printed in the final run command only
-#                     (never written to a file this repo tracks). Default:
-#                     "friend".
-#   DSH_KID_HOME   - override the kid DSH_HOME. Default: $HOME/.dsh-kid.
+# Env (all read by the dsh-kid-tutor process at launch, never written to a
+# file this repo tracks -- pass them on the same command line printed at the
+# end of this script, or export them in whatever launches dsh as a service):
+#   KID_NAME                    - the kid's name. Default: "friend".
+#   KID_ALERT_WEBHOOK_URL       - parent-alert target (e.g. an ntfy topic
+#                                 URL). Empty/unset disables alerting.
+#   KID_ALERT_WEBHOOK_HEADERS   - optional JSON object string of extra
+#                                 headers (e.g. '{"Title":"Kid Tutor Alert"}').
+#   DSH_KID_HOME                - override the kid DSH_HOME. Default: $HOME/.dsh-kid.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -122,5 +126,8 @@ cat <<EOF
 Install complete. Start the kid profile with:
 
   KID_NAME="$KID_NAME" DSH_HOME="$DSH_KID_HOME" dsh --profile kid --port 3081 --no-open
+
+Parent alerts are OFF by default. To turn them on, add before "dsh":
+  KID_ALERT_WEBHOOK_URL="<your ntfy topic or webhook URL>"
 
 EOF
