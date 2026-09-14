@@ -1,0 +1,14 @@
+packages:
+  - packages/*
+
+# Workspace-wide native-postinstall opt-ins. Add here (not per-package) so both
+# the kid and kid-admin packages share one allowlist; esbuild is vitest's
+# transitive dep and needs its postinstall script to run under pnpm's
+# default-deny build-script policy.
+allowBuilds:
+  esbuild: true
+  # koffi is a transitive dependency (native FFI bindings) pulled in by
+  # something in the workspace's dependency tree, not something either
+  # package uses directly; deny its postinstall script until something
+  # actually needs it.
+  koffi: false

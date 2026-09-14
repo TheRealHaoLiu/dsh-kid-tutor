@@ -1,0 +1,51 @@
+# HOST-plane patch for the `kid` profile. Docs/dsh-seams.md §1b: this reaches
+# `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`'s rows plus
+# `dsh-kid-tutor`'s own bundle patch, applied in `dsh.profile.bundles` order,
+# then this file. It does NOT reach anything inside
+# presets/kid/agent.cordis.yml (that's a separate agent-plane subtree — see
+# the "Known deviation" note in packages/dsh-kid-tutor/src/persona-name.ts for
+# why `kidName` is NOT set here despite docs/CONTRACT.md saying it would be).
+#
+# Public and non-secret: workspaceRoot/allowlist/quota defaults, the model
+# route, and the port are all plain deployment facts, not the kid's identity —
+# nothing here needs to be gitignored. Whatever IS private (the kid's real
+# name) goes through $KID_NAME at launch time instead (scripts/install.sh).
+
+- id: agent-presets
+  name: '@deepseek-ai/dsh-agent-presets'
+  config:
+    default: kid
+
+# Pin the model route explicitly rather than relying on dsh-base's own
+# default (currently the same route) staying unchanged upstream.
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash
+
+# Default port 3081 for a boot-time service that doesn't want to remember a
+# --port flag every launch; --port still overrides (docs/dsh-seams.md §8).
+- id: webserver
+  name: '@deepseek-ai/dsh-host-webserver'
+  config:
+    host: !!js ctx.webStartup.host ?? '127.0.0.1'
+    port: !!js ctx.webStartup.port ?? 3081
+
+# The REAL confinement backend (docs/dsh-seams.md §0.2, workspace-fence.ts's
+# header comment): the sandboxed fs backend and its policy both need to point
+# at the same workspace root dsh-kid-tutor's plugins default to
+# ($DSH_HOME/workspace), and mode is pinned to workspace-write so escalation
+# to danger-full-access is never even the standing policy for this profile
+# (workspace-fence.ts denies an explicit escalation attempt too, in case a
+# future dsh-tool-fs update changes the advertised default).
+- id: sandbox-policy
+  name: '@deepseek-ai/dsh-sandbox-policy'
+  config:
+    mode: workspace-write
+    workspaceRoot: !!js dshHomePath('workspace')
+
+- id: fs-sandbox
+  name: '@deepseek-ai/dsh-fs-sandbox'
+  config:
+    cwd: !!js dshHomePath('workspace')

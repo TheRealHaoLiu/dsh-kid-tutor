@@ -1,0 +1,58 @@
+# dsh-kid-tutor-admin's bundle patch (host-plane; applied once per process,
+# same Loader tree as @deepseek-ai/dsh-base/@deepseek-ai/dsh-web-app —
+# docs/dsh-seams.md §1b/§1c).
+#
+# `kid-admin-config` is the ONE patchable knob row: `profiles/kid-admin/
+# cordis.patch.yml` overrides its `config` wholesale to set `kidSessionsDir`
+# (docs/CONTRACT.md "Config defaults"). Every other row here reads it back via
+# `!!js ctx.kidAdminConfig...` rather than repeating the value, so there is
+# exactly one place a higher layer patches. Confirmed by boot (not just
+# `--dump-config`, which never evaluates `!!js`): a `!!js` expression sandbox
+# rejects `ctx.<service>` access with "cannot get property ... without
+# inject" unless that row also lists `inject: [<service>]` — the SAME
+# `inject:` field seen on `@deepseek-ai/dsh-web-app`'s `webserver`/`web-runtime`
+# rows (docs/dsh-seams.md §8), which turned out not to be decorative.
+- insert:
+    - id: kid-admin-config
+      name: dsh-kid-tutor-admin
+      config: {}
+
+    # `kid-store` needs its OWN, read-only view of the KID profile's session
+    # store — a SECOND `sessionPersistence`/`sessionQuery` pair pointed at
+    # `kidSessionsDir`, distinct from this admin process's own pair (mounted
+    # by `@deepseek-ai/dsh-base` for the admin agent's OWN conversation
+    # history). Both names are process-global service slots, so the second
+    # pair MUST sit behind its own `cordis:group` `isolate` realm or it
+    # collides with (or silently replaces) the admin's own session store
+    # (docs/dsh-seams.md §1d, mirroring the `standard` preset's own
+    # `compaction`/`planning`/`delegation` groups). `kid-store` itself is NOT
+    # isolated, so `ctx.kidStore` stays visible to `admin-tools` in the
+    # kid-admin agent preset (docs/dsh-seams.md §7 "One live writer per
+    # session" — this backend never appends, so a second read-only reader
+    # beside the kid process's own writer is safe).
+    - id: kid-store-realm
+      name: cordis:group
+      group: true
+      isolate:
+        sessionPersistence: true
+        sessionQuery: true
+      config:
+        - id: kid-session-persistence-jsonl
+          name: "@deepseek-ai/dsh-session-persistence-jsonl"
+          inject: [kidAdminConfig]
+          config:
+            root: !!js ctx.kidAdminConfig.kidSessionsDir
+
+        # `openAt: startup` (unlike dsh-base's own `openAt: never` default)
+        # because the admin's whole point is search/introspection over the
+        # kid's log — see docs/dsh-seams.md §7's note on this row's comment.
+        - id: kid-session-query-sqlite
+          name: "@deepseek-ai/dsh-session-query-sqlite"
+          config:
+            path: ":memory:"
+            openAt: startup
+
+        - id: kid-store
+          name: dsh-kid-tutor-admin/kid-store
+          inject: [kidAdminConfig]
+          config: !!js ctx.kidAdminConfig

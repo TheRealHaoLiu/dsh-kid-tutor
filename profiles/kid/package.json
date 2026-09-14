@@ -1,0 +1,17 @@
+{
+  "name": "dsh-profile-kid",
+  "private": true,
+  "dependencies": {
+    "dsh-kid-tutor": "link:/Volumes/case-sensitive-volume/projects/src/github.com/TheRealHaoLiu/dsh-kid-tutor/packages/dsh-kid-tutor",
+    "@deepseek-ai/dsh-web-fetch-http": "^0.0.1-rc.5"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-kid-tutor"
+      ]
+    }
+  }
+}

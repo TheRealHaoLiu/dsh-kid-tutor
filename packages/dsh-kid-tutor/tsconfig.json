@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    // ES2022 lib alone omits Symbol.dispose/using (Explicit Resource
+    // Management); ESNext.Disposable adds just that regardless of target,
+    // needed for @deepseek-ai/dsh-timeout's `Deadline` (output-guard.ts).
+    "lib": ["ES2022", "ESNext.Disposable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    // Source imports spell `./foo.ts` (matches the dsh monorepo's own
+    // convention, e.g. `import { defineTool } from './schema.ts'` in
+    // packages/core/tools/src/index.ts); these two let the build rewrite
+    // them to `./foo.js` in emitted output while `tsc --noEmit` accepts them
+    // as-is (tsconfig.base.json in the deepseek-harness monorepo sets both).
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

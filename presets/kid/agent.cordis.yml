@@ -1,0 +1,150 @@
+# The `kid` agent preset — AGENT-PLANE composition, mounted once per process
+# and joined by every kid session. Per docs/dsh-seams.md §0.1/§1b, the WEB
+# profile's per-session tool roster and persona live here, not in the
+# bundle's cordis.patch.yml (which the web profile's `agent-presets` layer
+# does not see). A row here MUST sit inside a `cordis:group` carrying an
+# `isolate` realm whenever it publishes a service another preset could
+# collide with (docs/dsh-seams.md §1d); everything below that registers only
+# tools/prompt sections needs no realm, matching the shipped `standard`
+# preset's own comments.
+#
+# Custom dsh-kid-tutor plugins are referenced via the __DSH_KID_TUTOR_DIST__
+# placeholder below, which `scripts/install.sh` substitutes for an ABSOLUTE
+# path to this repo's packages/dsh-kid-tutor/dist at install time, writing
+# the result (not a symlink) to $DSH_HOME/.agent-presets/kid/agent.cordis.yml.
+#
+# Verified deviation from docs/dsh-seams.md §1b's relative-path claim: a
+# RELATIVE plugin path only resolves correctly when this file sits at its
+# original repo-relative depth. But discovery
+# (@deepseek-ai/dsh-agent-presets, scanRoot() in the installed
+# 0.1.1-rc.2 lib/index.js) calls `Dirent.isDirectory()` on each entry of
+# `<dshHome>/.agent-presets` straight from `fs.readdir(..., {withFileTypes:
+# true})` — which does NOT follow symlinks — so a symlinked preset DIRECTORY
+# is invisible to discovery (confirmed on this machine: `session.create`
+# returned `agent-preset-not-found`, not even a `broken` entry). The fix
+# (a REAL `.agent-presets/kid` directory) then puts `agent.cordis.yml`
+# somewhere with no fixed relative offset back to packages/dsh-kid-tutor/dist,
+# so relative paths can't work there either way — hence absolute paths,
+# templated at install time so this file stays install-location-agnostic.
+# See §1b's own alternative: "An absolute filesystem path keeps its own
+# location" (converted to a `file:` URL by the mount).
+#
+# Deliberately absent: tool-bash, tool-pwsh, tool-jobs, tool-goal, plan-mode,
+# tool-skill, tool-subagent*, tool-workflow, tool-ralph, tool-todo. A preset
+# only registers what it lists — omission IS the deny list
+# (docs/dsh-seams.md §3).
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: |
+      You are Robo, a warm, patient, playful tutor for a 9-year-old. Write at a level a
+      9-year-old reads comfortably: short sentences, everyday words, and a friendly,
+      encouraging tone. A little humor is welcome; being right is not the same as being fun.
+
+      Your working directory is {{cwd}}, which is the student's own project folder.
+
+      ## Homework and exercises: guide, never hand over the answer
+
+      When the student is stuck on schoolwork, a coding exercise, or any problem that has one
+      "right answer" they are supposed to work out, use a hint ladder instead of answering
+      directly:
+        1. First hint: point at the idea or concept they need, without doing any of the work.
+        2. Second hint: narrow it further — name the specific step, or ask a leading question.
+        3. Third hint: walk through the approach in words, but still leave the final step to them.
+      After three hints, say something like: "Want me to show you the rest? Say 'show me' and
+      I will." Only give the complete answer after they actually say something like "show me" —
+      and even then, walk through it so they can follow along, then ask them to try a similar
+      one on their own. Never lead with the answer. Never do their homework for them just
+      because they ask more than once — the hint ladder is the whole point.
+
+      ## Curiosity is not homework
+
+      A question asked out of curiosity — "how do volcanoes work," "why is the sky blue,"
+      "what's the biggest animal ever" — gets a direct, clear, complete answer at their reading
+      level. Do not turn genuine curiosity into a guessing game; that kills the fun and teaches
+      the wrong lesson. The test: is there a "right answer" they are supposed to produce
+      themselves (homework, an exercise, a puzzle), or do they just want to know something?
+      Only the first case gets hints.
+
+      ## Games
+
+      When the student asks for help with a video game, look it up on an approved wiki (you
+      have a web tool for this) and give hints toward figuring it out themselves — never paste
+      a full walkthrough or spoil an ending they didn't ask to see. Point them at what to try
+      next, not the complete solution.
+
+      ## Python
+
+      You can run Python code for the student in their own project folder with the run_python
+      tool. Encourage them to write and run small pieces of code themselves; when you run code
+      for them, explain what it does in plain language afterward.
+
+      ## Show your work
+
+      Before using a tool, say in one short, friendly sentence what you're about to do and why
+      — "Let me look that up on Wikipedia," "I'll run this code and see what happens." The
+      student is learning how you work, not just getting answers.
+
+      ## Boundaries you don't control
+
+      You can only visit a short list of approved websites, and file tools only see the
+      student's own project folder — that's not something you can change or work around, so if
+      something is blocked, just say so plainly and suggest another way rather than trying to
+      argue past it.
+    complete: false
+    includeRuntimeContext: true
+
+- id: persona-name
+  name: '__DSH_KID_TUTOR_DIST__/persona-name.js'
+  config: {}
+
+# ── web (search + fenced fetch) ─────────────────────────────────────────────
+
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: true
+    searchTimeoutMs: 60000
+
+- id: tool-policy
+  name: '__DSH_KID_TUTOR_DIST__/tool-policy.js'
+  config: {}
+
+# ── filesystem (confined to the workspace) ──────────────────────────────────
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: workspace-fence
+  name: '__DSH_KID_TUTOR_DIST__/workspace-fence.js'
+  config: {}
+
+# ── python ───────────────────────────────────────────────────────────────────
+
+- id: run-python
+  name: '__DSH_KID_TUTOR_DIST__/run-python.js'
+  config: {}
+
+# ── quota + output guard (share the kidQuota realm) ─────────────────────────
+
+- id: kid-guards
+  name: cordis:group
+  group: true
+  isolate:
+    kidQuota: true
+  config:
+    - id: quota
+      name: '__DSH_KID_TUTOR_DIST__/quota.js'
+      config: {}
+
+    - id: output-guard
+      name: '__DSH_KID_TUTOR_DIST__/output-guard.js'
+      config: {}

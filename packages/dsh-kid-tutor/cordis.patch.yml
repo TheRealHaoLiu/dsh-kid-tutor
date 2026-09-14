@@ -1,0 +1,29 @@
+# dsh-kid-tutor bundle patch — HOST-PLANE rows only.
+#
+# Per docs/dsh-seams.md §0.1 / §1b, a bundle's cordis.patch.yml only reaches
+# the host Loader tree, which the `web` profile's per-session agent preset
+# does NOT see. Everything model-facing for this bundle (persona, tool
+# roster, guard/quota/fence plugins) lives in presets/kid/agent.cordis.yml
+# instead. The one thing that genuinely belongs at the host plane is enabling
+# the `web_fetch` HTTP provider, because `@deepseek-ai/dsh-web` (the seam
+# `tool-web` calls into) and its search provider are host-plane services
+# (packages/bundle/base/cordis.patch.yml `id: web` / `id: web-search-deepseek`)
+# that a preset cannot mount — only the model-facing `tool-web` row is
+# preset-level (docs/dsh-seams.md §3, "the web service and its search
+# provider stay in the host composition").
+#
+# `@deepseek-ai/dsh-web-fetch-http` is NOT mounted by any shipped bundle
+# (packages/bundle/base/cordis.patch.yml: "Fetch stays disabled and no fetch
+# provider is mounted: that provider defers SSRF protection and the model
+# would choose the request target"). Its own README says outright it "is an
+# SSRF primitive and must not be enabled in a deployment that can reach
+# sensitive internal network targets" — which is exactly why
+# `dsh-kid-tutor/tool-policy` (mounted in the preset) enforces a domain
+# allowlist plus a literal-IP/RFC1918/loopback/.local/.lan/.home/.internal
+# hostname guard on every `web_fetch` call via `ctx.tools.guard()`, in
+# addition to this row. Treat "this row is mounted" as equivalent to
+# "SSRF-reachable unless the allowlist guard is also loaded" — do not ship
+# this bundle without `dsh-kid-tutor/tool-policy` in the preset.
+- insert:
+    - id: web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'

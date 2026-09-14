@@ -1,0 +1,44 @@
+# Profile-level patch (host-plane; applies AFTER every bundle in
+# dsh.profile.bundles, so it can override rows either dsh-base/dsh-web-app or
+# dsh-kid-tutor-admin's own cordis.patch.yml already inserted —
+# docs/dsh-seams.md §1b/§1c: "last-write-wins by id, whole config replaced").
+
+# Every session on this profile defaults to the kid-admin preset
+# (docs/dsh-seams.md §1b: agent-presets row, `default:`).
+- id: agent-presets
+  config:
+    default: kid-admin
+
+# CONTRACT.md: admin process listens on 3082. Still pass
+# `--port 3082 --no-open` at launch (scripts/install-admin.sh prints the
+# command) — this just makes 3082/closed-browser the default even if someone
+# launches without flags.
+- id: webserver
+  config:
+    host: !!js ctx.webStartup.host ?? '127.0.0.1'
+    port: !!js ctx.webStartup.port ?? 3082
+
+- id: web-runtime
+  config:
+    openBrowser: false
+    printUrl: true
+    surfaceContext: true
+    trustedHosts: !!js ctx.webStartup.trustedHosts
+
+# CONTRACT.md: admin default model is deepseek-v4-pro (kid profile uses the
+# cheaper/faster deepseek-v4-flash for tutoring turns; the parent's analyst
+# can afford the stronger route since it runs on demand, not per kid turn).
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-pro
+
+# The one load-bearing knob (docs/CONTRACT.md "Config defaults"): where the
+# KID profile's session store lives. Must equal the kid profile's own
+# session-persistence-jsonl `root` (its `$DSH_HOME/sessions`, i.e.
+# `$HOME/.dsh-kid/sessions` under CONTRACT.md's two-DSH-homes layout).
+# `DSH_KID_SESSIONS_DIR` lets scripts/install-admin.sh (or phase 2's Windows
+# service unit) point elsewhere without editing this tracked file.
+- id: kid-admin-config
+  config:
+    kidSessionsDir: !!js process.env.DSH_KID_SESSIONS_DIR ?? (process.env.HOME + '/.dsh-kid/sessions')

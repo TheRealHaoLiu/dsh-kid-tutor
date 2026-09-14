@@ -1,0 +1,21 @@
+{
+  "name": "dsh-kid-tutor-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Workspace root for the dsh-kid-tutor bundle (and sibling dsh-kid-tutor-admin package).",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r run build",
+    "check": "pnpm -r run check",
+    "test": "pnpm -r run test",
+    "format": "pnpm -r run format",
+    "format:check": "pnpm -r run format:check"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.0",
+    "typescript": "^5.7.0"
+  }
+}
