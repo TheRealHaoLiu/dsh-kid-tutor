@@ -55,6 +55,45 @@ clears the configured `alertSeverity` threshold, default `2`).
 POST settles — it never blocks the kid's own turn. `excerpt` is the kid's
 triggering message, truncated to 200 chars.
 
+## Judge classifier JSON contract (binding for any editor of the judge prompt)
+
+The judge call (`output-guard.ts`, currently `JUDGE_SYSTEM_PROMPT`) is given one
+exchange — the kid's latest actual message (`role: 'user'` AND
+`source.kind === 'user'`; a `source.kind === 'plugin'` runtime-context snapshot
+riding the same `role` must never be substituted in) plus the tutor's candidate
+reply — and MUST respond with exactly one JSON object, one line, no
+surrounding prose:
+
+```json
+{
+  "verdict": "pass" | "redo" | "block",
+  "reason": "one short sentence",
+  "category": "none" | "sexual" | "violence" | "self_harm" | "drugs" | "personal_info" | "stranger_contact" | "hate" | "other_adult",
+  "severity": 0 | 1 | 2
+}
+```
+
+- `verdict` judges the TUTOR REPLY only: `pass` (safe, not a handed-over
+  homework answer, short enough for a 9-year-old), `redo` (otherwise fine but
+  too long/dense OR hands over a homework/exercise answer outright — curiosity
+  questions answered directly are NOT homework), `block` (either party's text
+  is unsafe/inappropriate for a 9-year-old).
+- `category`/`severity` classify the STUDENT's message for parent-alerting,
+  independent of `verdict` — a `pass`-verdict reply about a `severity: 2` topic
+  still triggers `parent-alert` and still overrides the kid-facing outcome to a
+  replacement (`output-guard.ts`'s `evaluate()`: a `shouldAlert()` topic is
+  never allowed to just flow through, even on a technically-safe reply).
+- A response that fails to parse against this shape, or that never arrives
+  (timeout/adapter error), is treated as `{ verdict: 'block' }` with
+  `category: 'none'`/`severity: 0` — fail closed, per DESIGN.md §4.
+- Unrecognized `category` strings fall back to `'none'`; out-of-range or
+  non-integer `severity` values clamp into `0..2` (or fall back to `0`).
+
+Any future editor of `output-guard.ts`'s judge prompt must keep this exact
+field set and these exact enum values — `docs/CONTRACT.md` is the source of
+truth the admin bundle's own tooling and this doc's readers rely on, per this
+file's own "change here first" rule.
+
 ## Kid tool roster (preset), nothing else registered
 
 `web_search` (deepseek-official provider), `web_fetch` (allowlist ONLY — the fetch
